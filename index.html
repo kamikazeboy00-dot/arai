@@ -565,13 +565,13 @@
 </div>
 
 <script>
-  // ★ ここにデプロイしたGASのウェブアプリURLを貼り付けてください ★
+  // ★ デプロイしたGASのウェブアプリURL ★
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwL47zgBD_nwab8C5Bupn8lBffZ0h8L1M2CnKDRhXyYlO-nYg6LFJi1_s-T8FyGOo84Pw/exec";
 
   // 本日の日付をセット
   document.getElementById('input-date').valueAsDate = new Date();
 
-  // タブ切り替え（スマホブラウザでも確実に動作するよう引数経由で切り替え）
+  // タブ切り替え
   function switchTab(btn, id) {
     document.querySelectorAll('.tab-btn').forEach(function(b) {
       b.classList.remove('active');
@@ -593,7 +593,7 @@
 
   // スプレッドシートへ保存
   async function saveRecord() {
-    if (GAS_API_URL === "https://script.google.com/macros/s/AKfycbwL47zgBD_nwab8C5Bupn8lBffZ0h8L1M2CnKDRhXyYlO-nYg6LFJi1_s-T8FyGOo84Pw/exec") {
+    if (!GAS_API_URL || GAS_API_URL.includes("ここにGASの")) {
       alert("index.html内の GAS_API_URL に、GASのURLを貼り付けてください。");
       return;
     }
@@ -659,7 +659,7 @@
   async function loadChartData() {
     let records = [];
     try {
-      if (GAS_API_URL !== "https://script.google.com/macros/s/AKfycbwL47zgBD_nwab8C5Bupn8lBffZ0h8L1M2CnKDRhXyYlO-nYg6LFJi1_s-T8FyGOo84Pw/exec") {
+      if (GAS_API_URL && !GAS_API_URL.includes("ここにGASの")) {
         const res = await fetch(GAS_API_URL);
         const data = await res.json();
         records = data.records;
