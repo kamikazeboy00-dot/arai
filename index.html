@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Training Log</title>
+  <!-- Chart.js（グラフ描画用） -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #121214;
+      --card: #1e1e24;
+      --accent: #ff5722;
+      --accent-soft: rgba(255, 87, 34, 0.15);
+      --text: #f0f0f2;
+      --text-sub: #9ca3af;
+      --border: #2e2e38;
+      --green: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding-bottom: 90px; }
+    
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(18, 18, 20, 0.95); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border); padding: 12px 16px 8px;
+    }
+    h1 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+
+    /* 基本入力エリア（日付・体重・体脂肪） */
+    .metric-bar {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 12px; margin: 12px 16px;
+      display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px;
+    }
+    .metric-group { display: flex; flex-direction: column; }
+    .metric-group label { font-size: 0.72rem; color: var(--text-sub); margin-bottom: 2px; }
+    .metric-group input {
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+      color: #fff; border-radius: 6px; padding: 6px 8px; font-size: 0.88rem; outline: none;
+    }
+
+    /* タブ切り替えバー */
+    .tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 0 16px 8px; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text-sub);
+      padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; white-space: nowrap; cursor: pointer;
+    }
+    .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+
+    .content { padding: 0 16px; max-width: 650px; margin: 0 auto; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* 種目カード */
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px; margin-bottom: 12px;
+    }
+    .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .exercise-name { font-size: 0.96rem; font-weight: 700; line-height: 1.3; }
+    
+    .yt-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #e50914; color: #fff; text-decoration: none;
+      font-size: 0.72rem; padding: 4px 8px; border-radius: 6px;
+      white-space: nowrap; font-weight: bold; flex-shrink: 0;
+    }
+
+    .spec-box {
+      margin-top: 8px; background: rgba(0,0,0,0.25); border-radius: 8px;
+      padding: 8px 10px; font-size: 0.82rem; color: #cbd5e1;
+    }
+    .spec-row { display: flex; justify-content: space-between; padding: 2px 0; }
+    .spec-target { color: #ffab91; font-weight: 600; }
+
+    .memo {
+      margin-top: 8px; font-size: 0.78rem; color: #fbbf24;
+      background: rgba(251, 191, 36, 0.08); padding: 6px 10px; border-radius: 6px; line-height: 1.35;
+    }
+
+    /* 当日の入力フォーム */
+    .record-input-row {
+      margin-top: 10px; display: flex; align-items: center; gap: 8px;
+      border-top: 1px dashed var(--border); padding-top: 8px;
+    }
+    .record-input-row input {
+      flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      color: #fff; border-radius: 6px; padding: 6px 8px; font-size: 0.85rem; outline: none;
+    }
+    .record-input-row span { font-size: 0.8rem; color: var(--text-sub); }
+
+    /* 保存バー */
+    .save-dock {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(18, 18, 20, 0.95); backdrop-filter: blur(8px);
+      border-top: 1px solid var(--border); padding: 12px 16px;
+      display: flex; justify-content: center; z-index: 100;
+    }
+    .save-btn {
+      width: 100%; max-width: 500px; background: var(--green); color: #fff;
+      border: none; padding: 12px; border-radius: 10px; font-weight: bold;
+      font-size: 1rem; cursor: pointer; transition: opacity 0.2s;
+    }
+    .save-btn:disabled { opacity: 0.5; }
+
+    .chart-container {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px; margin-bottom: 16px;
+    }
+    .chart-title { font-size: 0.9rem; font-weight: bold; margin-bottom: 10px; color: #cbd5e1; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🏋️‍♂️ Training Program</h1>
+</header>
+
+<!-- 体重・日付・体脂肪ヘッダー -->
+<div class="metric-bar">
+  <div class="metric-group">
+    <label>日付</label>
+    <input type="date" id="input-date">
+  </div>
+  <div class="metric-group">
+    <label>体重 (kg)</label>
+    <input type="number" step="0.1" id="input-weight" placeholder="65.0">
+  </div>
+  <div class="metric-group">
+    <label>体脂肪率 (%)</label>
+    <input type="number" step="0.1" id="input-fat" placeholder="15.0">
+  </div>
+</div>
+
+<!-- タブボタン（thisを明示的に渡す構造に修正済み） -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab(this, 'tab-mon')">月 (背中・胸)</button>
+  <button class="tab-btn" onclick="switchTab(this, 'tab-thu')">木 (肩・下半身)</button>
+  <button class="tab-btn" onclick="switchTab(this, 'tab-arms')">腕特化</button>
+  <button class="tab-btn" onclick="switchTab(this, 'tab-chart')">📊 グラフ</button>
+  <button class="tab-btn" onclick="switchTab(this, 'tab-policy')">全体方針</button>
+</div>
+
+<div class="content">
+
+  <!-- ================= 月曜日プログラム ================= -->
+  <div id="tab-mon" class="tab-panel active" data-prog="月：背中・胸">
+    
+    <div class="card" data-ex="ラットプルダウン">
+      <div class="card-head">
+        <div class="exercise-name">ラットプルダウン</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/heLYeQlutY4?si=TpvO1lqFqzgiGcD0" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (50kg) / 6回 (50kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-12-12 (目標 70kg)</span></div>
+      </div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 70kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ロープフレンチプレス（上から水平）">
+      <div class="card-head">
+        <div class="exercise-name">ロープフレンチプレス（上から水平）</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/gPcHrWl7PT4?si=NwZV1UrMHajnmwNm" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>12回 (30kg) / 12回 (30kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-12-16 (目標 40kg)</span></div>
+      </div>
+      <div class="memo">💡 肘の位置をピンで留められたイメージで固定するとよりよい</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 40kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ローププレスダウン (両手)">
+      <div class="card-head">
+        <div class="exercise-name">ローププレスダウン (両手)</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/u6sqENBsXjg?si=xXTLOBoPmZj4qZlw" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>12回 (50kg) / 12回 (50kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-12-16 (目標 60kg)</span></div>
+      </div>
+      <div class="memo">💡 思いっきりチートして良い。※オススメはV字バー</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 60kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ダンベルワンハンドロウ">
+      <div class="card-head">
+        <div class="exercise-name">ダンベルワンハンドロウ</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/LdRCr2OzFQw?si=gF-EiYnqGvnYACIW" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (20kg) / 6回 (20kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">10-10-10 片手ずつ (目標 26kg)</span></div>
+      </div>
+      <div class="memo">💡 上体を起こし気味にして肘を開き僧帽筋上部へ。左右交互だとスタミナが持たないため片手ずつ。ベントオーバーロウのフォームを意識。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 26kg 10回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="懸垂 (アシスト)">
+      <div class="card-head">
+        <div class="exercise-name">懸垂 (アシストウェイト)</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/v3z7H_3YsaQ?si=9CqGJfMiqcIc3ZoP" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (30kg) / 6回 (80kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">10限界-10限界-10限界 (80kg)</span></div>
+      </div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 補助80kg 10回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ダンベルフライ">
+      <div class="card-head">
+        <div class="exercise-name">ダンベルフライ</div>
+        <a class="yt-btn" href="https://youtu.be/RZqgkpIN1cw?si=itAfvBzVzrkEsMa1" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>8回 (12kg) / 8回 (12kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">16-12-12 (目標 12kg)</span></div>
+      </div>
+      <div class="memo">💡 マシンがあるならマシンでも良い</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 12kg 16回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="マシンプレス (片手ずつ)">
+      <div class="card-head">
+        <div class="exercise-name">マシンプレス (片手ずつ)</div>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (12kg) / 6回 (12kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-10-10 (目標 12kg)</span></div>
+      </div>
+      <div class="memo">💡 身体を傾けて斜めに押す。鎖骨ラインで動かすのが理想。無ければダンベルワンハンドプレス。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 12kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ケーブルクロスオーバー デクライン">
+      <div class="card-head">
+        <div class="exercise-name">ケーブルクロスオーバー デクラインプレス</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/I1yflr7JX_c?si=_zFTAQLeAAI5b7b0" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (30kg) / 6回 (30kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-10-10 (目標 40kg)</span></div>
+      </div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 40kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="スミスマシン インクラインベンチ">
+      <div class="card-head">
+        <div class="exercise-name">スミスマシン インクラインベンチ</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/kvFVq6wg0Ks?si=ighhtz--hIlDLAcK" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (30kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-10-10-10 (目標 40kg)</span></div>
+      </div>
+      <div class="memo">💡 アゴを上げてアゴにバーがくっつくように下ろす</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 40kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="バックエクステンション">
+      <div class="card-head">
+        <div class="exercise-name">バックエクステンション</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/upxW1WlptUE?si=mnhXHf5jB46U8iVy" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (40kg) / 6回 (40kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-10-10 (目標 100kg)</span></div>
+      </div>
+      <div class="memo">💡 マシンがない場合プーリーロウをストレートバーに変えて上半身を前後に動かす（ナローグリップ）。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 100kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="腹筋マシン">
+      <div class="card-head">
+        <div class="exercise-name">腹筋に関連するマシン（毎回実施）</div>
+      </div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 35kg 20回 3セット">
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= 木曜日プログラム ================= -->
+  <div id="tab-thu" class="tab-panel" data-prog="木：肩・下半身">
+    
+    <div class="card" data-ex="ペックデッキ リアデルト">
+      <div class="card-head">
+        <div class="exercise-name">ペックデッキ リアデルト (片手ずつ)</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/vJYkqD7a0gM?si=86f2QmmJElMsZJOE" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>8回 (30kg) / 8回 (30kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-12-12 片手ずつ (目標 50kg)</span></div>
+      </div>
+      <div class="memo">💡 左右交互だとスタミナが持たないため片手ずつ。無い場合は横向きに寝ころびダンベルで。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 50kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ワンハンド ダンベルショルダープレス">
+      <div class="card-head">
+        <div class="exercise-name">ワンハンド ダンベルショルダープレス</div>
+        <a class="yt-btn" href="https://youtu.be/_OYXclm_V40?si=KiQNKdJvoiG8ZfGD" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (10kg) / 6回 (10kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">10-10-10 片手ずつ (目標 18kg)</span></div>
+      </div>
+      <div class="memo">💡 やらないほうの手はマシンやラックに掴まる</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 18kg 10回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ライイング サイドレイズ">
+      <div class="card-head">
+        <div class="exercise-name">ライイング サイドレイズ</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/4-EIo1TQc5M?si=C9pK7dAGbb1a1cg-" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>10回 (10kg) / 10回 (10kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">12-12-16 (目標 12kg)</span></div>
+      </div>
+      <div class="memo">💡 より僧帽を強化したい場合はインクラインでも可</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 12kg 12回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ダンベルリアデルトイドシュラッグ">
+      <div class="card-head">
+        <div class="exercise-name">ダンベルリアデルトイドシュラッグ</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/hsHAXjVLm-U?si=zv562pLSiIdpkq-w" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>10回 (10kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">20-16-16 (目標 20〜28kg)</span></div>
+      </div>
+      <div class="memo">💡 僧帽筋に力が入りすぎないように注意が必要</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 20kg 20回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ダンベルワンハンドシュラッグ">
+      <div class="card-head">
+        <div class="exercise-name">ダンベルワンハンドシュラッグ</div>
+        <a class="yt-btn" href="https://youtu.be/BYY2u0kQdSA?si=OTOH88LrjhiUD9z9" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>10回 (10kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">20-16-16 (目標 28kg)</span></div>
+      </div>
+      <div class="memo">💡 身体を傾けて僧帽筋の繊維を縦にするのがポイント</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 28kg 20回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ワイドスタンス レッグプレス">
+      <div class="card-head">
+        <div class="exercise-name">ワイドスタンス レッグプレス</div>
+        <a class="yt-btn" href="https://youtu.be/6zjOOuwLoBI?si=qeYIo68iK0LzWBLv" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (100kg) / 6回 (100kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">10-10-10 (目標 160kg)</span></div>
+      </div>
+      <div class="memo">💡 深ければ深いほど良い。レッグプレスが無ければバーベルスモースクワット。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 160kg 10回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ヒップスラスト">
+      <div class="card-head">
+        <div class="exercise-name">ヒップスラスト</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/i5Vpsf-c6r0?si=G-IBKAeXeGgAK52L" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>6回 (30kg) / 6回 (30kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">10-10-10 (目標 100kg)</span></div>
+      </div>
+      <div class="memo">💡 脚はワイドに広げ、足が逆八の字になるようにする。トップポジションで止める意識。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 100kg 10回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="レッグカール">
+      <div class="card-head">
+        <div class="exercise-name">レッグカール</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/Y3_BZbX4epo?si=k5aciut4TbqObMEa" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>8回 (40kg) / 8回 (40kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">16-12-12 (目標 50kg)</span></div>
+      </div>
+      <div class="memo">💡 脚をぴったり閉じて膝が離れないようにする。足も閉じる。レッグエクステンションマシンで片足ずつ代用も可。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 50kg 16回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ダンベルライイングエクステンション">
+      <div class="card-head">
+        <div class="exercise-name">ダンベルライイングエクステンション</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/Mq9eoGIiCSU?si=ebrMACkejLiuZLsF" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>12回 (8kg) / 12回 (8kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">16-12-12 片手ずつ (目標 12kg)</span></div>
+      </div>
+      <div class="memo">💡 スピネイト（回外）を入れると効果的</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 12kg 16回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ロープフレンチプレス (両手)">
+      <div class="card-head">
+        <div class="exercise-name">ロープフレンチプレス (両手)</div>
+        <a class="yt-btn" href="https://youtube.com/shorts/5cjI_omKevQ?si=Nqmm3m03_3WRLQbG" target="_blank">▶ 動画</a>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>アップ</span><span>12回 (40kg) / 12回 (40kg)</span></div>
+        <div class="spec-row"><span>メイン</span><span class="spec-target">16-12-12 (目標 50kg)</span></div>
+      </div>
+      <div class="memo">💡 無い場合はショートバーで行う</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 50kg 16回">
+      </div>
+    </div>
+
+    <div class="card" data-ex="アブドミナル">
+      <div class="card-head">
+        <div class="exercise-name">アブドミナル (腹筋)</div>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>基準</span><span>35kg → 35kg → 42-42-42kg</span></div>
+      </div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 42kg 15回">
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= 腕特化プログラム ================= -->
+  <div id="tab-arms" class="tab-panel" data-prog="腕特化">
+    <div class="card" data-ex="バーベルカール">
+      <div class="card-head">
+        <div class="exercise-name">バーベルカール</div>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>回数・セット</span><span>20回前後 × 5セット</span></div>
+        <div class="spec-row"><span>進行例</span><span>30kg×20 → 35kg×20 → 40kg×20 → 45kg×15 → 50kg×12</span></div>
+      </div>
+      <div class="memo">💡 重量は無理せず軽めでOK。後半は多少反動を使っても可。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 35kg×20, 40kg×15">
+      </div>
+    </div>
+
+    <div class="card" data-ex="ライイングエクステンション (スカルクラッシャー)">
+      <div class="card-head">
+        <div class="exercise-name">ライイングエクステンション</div>
+      </div>
+      <div class="spec-box">
+        <div class="spec-row"><span>回数・セット</span><span>10回前後 × 3セット (3周)</span></div>
+        <div class="spec-row"><span>進行例</span><span>40kg×12 → 45kg×10 → 50kg×8 → 50kg×7 → 50kg×6</span></div>
+      </div>
+      <div class="memo">💡 3周実施。重たい設定なので無理のない重量で。</div>
+      <div class="record-input-row">
+        <span>記録:</span>
+        <input type="text" class="ex-weight" placeholder="例: 45kg 10回">
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= グラフ推移 ================= -->
+  <div id="tab-chart" class="tab-panel">
+    <button onclick="loadChartData()" style="width:100%; padding:8px; margin-bottom:12px; background:var(--card); border:1px solid var(--border); color:#fff; border-radius:8px; cursor:pointer;">🔄 データを更新して再描画</button>
+    <div class="chart-container">
+      <div class="chart-title">📈 体重 & 体脂肪率の推移</div>
+      <canvas id="bodyChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">🏋️‍♂️ ラットプルダウンの重量推移</div>
+      <canvas id="exerciseChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ================= 方針・心得 ================= -->
+  <div id="tab-policy" class="tab-panel">
+    <div class="card" style="line-height:1.7; font-size:0.88rem; color:#cbd5e1;">
+      <h3 style="color:var(--accent); margin-bottom:8px;">🎯 プログラム方針</h3>
+      <ul style="padding-left:18px;">
+        <li>筋肉、関節を鍛える。</li>
+        <li>ターゲットにしている筋群を筋肥大させることで垂れ下がりを防止する。</li>
+        <li>心臓が上下動する種目（スクワット等）はキツく継続しにくいため省く。</li>
+        <li>キツくならないように片手動作とする。</li>
+        <li>アスレチックな要素は少なめ。</li>
+        <li>毎週少しずつ負荷を増やしていく。挑戦していく。</li>
+        <li>進行目安：週2回（曜日は自由）。</li>
+        <li><strong>※腹筋は毎回やる。</strong></li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- 画面下部 固定送信ボタン -->
+<div class="save-dock">
+  <button class="save-btn" id="save-btn" onclick="saveRecord()">📝 今日の記録をスプレッドシートに保存</button>
+</div>
+
+<script>
+  // ★ ここにデプロイしたGASのウェブアプリURLを貼り付けてください ★
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwL47zgBD_nwab8C5Bupn8lBffZ0h8L1M2CnKDRhXyYlO-nYg6LFJi1_s-T8FyGOo84Pw/exec";
+
+  // 本日の日付をセット
+  document.getElementById('input-date').valueAsDate = new Date();
+
+  // タブ切り替え（スマホブラウザでも確実に動作するよう引数経由で切り替え）
+  function switchTab(btn, id) {
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+      b.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(p) {
+      p.classList.remove('active');
+    });
+
+    btn.classList.add('active');
+    const targetPanel = document.getElementById(id);
+    if (targetPanel) {
+      targetPanel.classList.add('active');
+    }
+
+    if (id === 'tab-chart') {
+      loadChartData();
+    }
+  }
+
+  // スプレッドシートへ保存
+  async function saveRecord() {
+    if (GAS_API_URL === "https://script.google.com/macros/s/AKfycbwL47zgBD_nwab8C5Bupn8lBffZ0h8L1M2CnKDRhXyYlO-nYg6LFJi1_s-T8FyGOo84Pw/exec") {
+      alert("index.html内の GAS_API_URL に、GASのURLを貼り付けてください。");
+      return;
+    }
+
+    const saveBtn = document.getElementById('save-btn');
+    saveBtn.disabled = true;
+    saveBtn.innerText = "送信中...";
+
+    const date = document.getElementById('input-date').value;
+    const weight = document.getElementById('input-weight').value;
+    const bodyFat = document.getElementById('input-fat').value;
+
+    const activePanel = document.querySelector('.tab-panel.active');
+    const programName = activePanel ? (activePanel.getAttribute('data-prog') || "共通") : "共通";
+    
+    const exercises = [];
+    if (activePanel) {
+      activePanel.querySelectorAll('.card').forEach(card => {
+        const exName = card.getAttribute('data-ex');
+        const val = card.querySelector('.ex-weight')?.value.trim();
+        if (exName && val) {
+          exercises.push({ name: exName, weight: val });
+        }
+      });
+    }
+
+    const payload = {
+      date: date,
+      weight: weight,
+      bodyFat: bodyFat,
+      program: programName,
+      exercises: exercises
+    };
+
+    try {
+      await fetch(GAS_API_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      alert("スプレッドシートに保存しました！");
+      saveToLocal(payload);
+    } catch (e) {
+      alert("送信に失敗しました: " + e.message);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerText = "📝 今日の記録をスプレッドシートに保存";
+    }
+  }
+
+  function saveToLocal(payload) {
+    let history = JSON.parse(localStorage.getItem('gym_logs') || '[]');
+    history.push(payload);
+    localStorage.setItem('gym_logs', JSON.stringify(history));
+  }
+
+  // グラフ描画
+  let bChart = null;
+  let eChart = null;
+
+  async function loadChartData() {
+    let records = [];
+    try {
+      if (GAS_API_URL !== "https://script.google.com/macros/s/AKfycbwL47zgBD_nwab8C5Bupn8lBffZ0h8L1M2CnKDRhXyYlO-nYg6LFJi1_s-T8FyGOo84Pw/exec") {
+        const res = await fetch(GAS_API_URL);
+        const data = await res.json();
+        records = data.records;
+      }
+    } catch (e) {
+      console.log("GASからの取得失敗、ローカルデータを使用します", e);
+    }
+
+    if (!records || records.length === 0) {
+      const local = JSON.parse(localStorage.getItem('gym_logs') || '[]');
+      local.forEach(l => {
+        records.push({ date: l.date, weight: l.weight, bodyFat: l.bodyFat, exercise: "", weightValue: "" });
+        (l.exercises || []).forEach(ex => {
+          records.push({ date: l.date, weight: l.weight, bodyFat: l.bodyFat, exercise: ex.name, weightValue: ex.weight });
+        });
+      });
+    }
+
+    const dateMap = {};
+    records.forEach(r => {
+      if (!dateMap[r.date]) dateMap[r.date] = { weight: null, fat: null };
+      if (r.weight) dateMap[r.date].weight = parseFloat(r.weight);
+      if (r.bodyFat) dateMap[r.date].fat = parseFloat(r.bodyFat);
+    });
+
+    const dates = Object.keys(dateMap).sort();
+    const weightData = dates.map(d => dateMap[d].weight);
+    const fatData = dates.map(d => dateMap[d].fat);
+
+    const ctx1 = document.getElementById('bodyChart').getContext('2d');
+    if (bChart) bChart.destroy();
+    bChart = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: dates,
+        datasets: [
+          { label: '体重(kg)', data: weightData, borderColor: '#ff5722', tension: 0.2 },
+          { label: '体脂肪率(%)', data: fatData, borderColor: '#3b82f6', tension: 0.2 }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: { x: { grid: { color: '#2e2e38' } }, y: { grid: { color: '#2e2e38' } } }
+      }
+    });
+
+    const latRows = records.filter(r => r.exercise && r.exercise.includes("ラットプル"));
+    const latDates = latRows.map(r => r.date);
+    const latWeights = latRows.map(r => parseFloat(r.weightValue) || null);
+
+    const ctx2 = document.getElementById('exerciseChart').getContext('2d');
+    if (eChart) eChart.destroy();
+    eChart = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: latDates,
+        datasets: [{ label: 'ラットプルダウン(kg)', data: latWeights, borderColor: '#10b981', tension: 0.2 }]
+      },
+      options: {
+        responsive: true,
+        scales: { x: { grid: { color: '#2e2e38' } }, y: { grid: { color: '#2e2e38' } } }
+      }
+    });
+  }
+</script>
+</body>
+</html>
